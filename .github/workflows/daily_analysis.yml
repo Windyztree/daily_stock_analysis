@@ -55,6 +55,30 @@ jobs:
       - name: 创建必要目录
         run: |
           mkdir -p data logs reports
+
+      - name: 轮换股票列表
+        id: rotate-stocks
+        run: |
+          # 定义周一到周五的股票列表（共 5 组，按星期轮换）
+          STOCK_MON="159516,159811,159732,588800,159682,513310,588000,159967,515880"
+          STOCK_TUE="159739,512980,515070,161725,160127,159865,516560,510720,159302"
+          STOCK_WED="159625,159632,513290,518880,517520,159919,563350,515250,516380"
+          STOCK_THU="513360,516950,159745,512660,159206,159570,513330,513130,513050,hk01211"
+          STOCK_FRI="hk00700,hk09988,hk01810,MSFT,AAPL,GOOGL,AMZN,NVDA,META,TSLA"
+
+          # 获取北京时间的星期几（1=周一 ... 5=周五）
+          DOW=$(TZ='Asia/Shanghai' date +%u)
+          case $DOW in
+            1) TODAY_STOCKS="$STOCK_MON" ;;
+            2) TODAY_STOCKS="$STOCK_TUE" ;;
+            3) TODAY_STOCKS="$STOCK_WED" ;;
+            4) TODAY_STOCKS="$STOCK_THU" ;;
+            5) TODAY_STOCKS="$STOCK_FRI" ;;
+            *) TODAY_STOCKS="$STOCK_MON" ;;  # 周末兜底（不会触发，cron 已限制周一到周五）
+          esac
+
+          echo "📊 今日（周$DOW）股票列表: $TODAY_STOCKS"
+          echo "stocks=$TODAY_STOCKS" >> "$GITHUB_OUTPUT"
       
       - name: 执行股票分析
         env:
@@ -80,6 +104,9 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL || secrets.OPENAI_BASE_URL }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL || secrets.OPENAI_MODEL }}
+
+          # DeepSeek
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
 
           # Anthropic / Claude
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -159,7 +186,8 @@ jobs:
           # ==========================================
           # 自选股配置
           # ==========================================
-          STOCK_LIST: ${{ vars.STOCK_LIST || secrets.STOCK_LIST || '600519' }}
+          # 优先级：vars.STOCK_LIST（手动指定）> 轮换列表 > secrets > 默认值
+          STOCK_LIST: ${{ vars.STOCK_LIST || steps.rotate-stocks.outputs.stocks || secrets.STOCK_LIST || '600519' }}
           MARKET_REVIEW_REGION: ${{ vars.MARKET_REVIEW_REGION || secrets.MARKET_REVIEW_REGION || 'cn' }}
           
           # ==========================================
@@ -211,6 +239,7 @@ jobs:
           echo "【AI 配置】"
           echo "  LiteLLM: $([ -n "$LITELLM_CONFIG" ] || [ -n "$LITELLM_API_KEY" ] || [ -n "$LITELLM_MODEL" ] && echo '✅ 已配置' || echo '❌ 未配置')"
           echo "  Gemini API Key: $([ -n "$GEMINI_API_KEY" ] && echo '✅ 已配置' || echo '❌ 未配置')"
+          echo "  DeepSeek Key:   $([ -n "$DEEPSEEK_API_KEY" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  AIHubMix Key:   $([ -n "$AIHUBMIX_KEY" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  OpenAI API Key: $([ -n "$OPENAI_API_KEY" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  Anthropic Key:  $([ -n "$ANTHROPIC_API_KEY" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
